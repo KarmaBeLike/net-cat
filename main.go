@@ -95,12 +95,13 @@ func (s *server) broadcaster() {
 }
 
 func (s *server) handleConn(conn net.Conn) {
+	s.connections++
 	if s.connections > s.maxConnections {
 		conn.Write([]byte("Chatroom is full, try again later"))
 		conn.Close()
+		s.connections--
 		return
 	}
-	s.connections++
 	Welcome(conn)
 	// ch := make(chan string) // Исходящие сообщения клиентов
 	// go clientWriter(conn, ch)
