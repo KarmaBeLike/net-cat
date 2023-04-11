@@ -1,0 +1,3 @@
+check the symbols in names
+delete new line in history
+devide functions

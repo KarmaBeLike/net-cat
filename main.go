@@ -60,6 +60,7 @@ type client chan<- string // Канал исходящих сообщений
 var (
 	clients  = make(map[string]net.Conn) // Все подключенные клиенты
 	entering = make(chan message)
+	history  = []string{}
 	leaving  = make(chan message)
 	messages = make(chan message) // Все входящие сообщения клиента
 )
@@ -69,39 +70,55 @@ const timeFormat = "2006-01-02 15:04:05"
 func (s *server) broadcaster() {
 	for {
 		select {
+
 		case msg := <-messages: // Широковещательное входящее сообщение во все каналы исходящих сообщений для клиентов
+			s.mutex.Lock()
 			for cli, conn := range s.clients {
 				if cli != msg.name {
 					conn.Write([]byte(fmt.Sprintf("\n[%s][%s]:%s", msg.time, msg.name, msg.text)))
 					conn.Write([]byte(fmt.Sprintf("\n[%s][%s]:", time.Now().Format(timeFormat), cli)))
 				}
 			}
+			s.mutex.Unlock()
 		case msg := <-entering:
+			s.mutex.Lock()
 			for cli, conn := range s.clients {
+				if cli == msg.name {
+					for _, v := range history {
+						conn.Write([]byte(fmt.Sprintf("\n%s[%s][%s]:", v, time.Now().Format(timeFormat), msg.name)))
+						// conn.Write([]byte(fmt.Sprintf("\n[%s][%s]:", time.Now().Format(timeFormat), cli)))
+					}
+				}
 				if cli != msg.name {
 					conn.Write([]byte(fmt.Sprintf("\n%s", msg.text)))
 					conn.Write([]byte(fmt.Sprintf("\n[%s][%s]:", time.Now().Format(timeFormat), cli)))
 				}
 			}
+			s.mutex.Unlock()
 		case msg := <-leaving:
+			s.mutex.Lock()
 			for cli, conn := range s.clients {
 				if cli != msg.name {
 					conn.Write([]byte(fmt.Sprintf("\n%s", msg.text)))
 					conn.Write([]byte(fmt.Sprintf("\n[%s][%s]:", time.Now().Format(timeFormat), cli)))
 				}
 			}
+			s.mutex.Unlock()
 		}
 	}
 }
 
 func (s *server) handleConn(conn net.Conn) {
+	s.mutex.Lock()
 	s.connections++
+
 	if s.connections > s.maxConnections {
 		conn.Write([]byte("Chatroom is full, try again later"))
 		conn.Close()
 		s.connections--
 		return
 	}
+	s.mutex.Unlock()
 	Welcome(conn)
 	// ch := make(chan string) // Исходящие сообщения клиентов
 	// go clientWriter(conn, ch)
@@ -111,7 +128,7 @@ func (s *server) handleConn(conn net.Conn) {
 	for scan.Scan() {
 		name = scan.Text()
 		name = strings.TrimSpace(name)
-		if len(name) == 0 {
+		if len(name) == 0 || len(name) > 20 {
 			conn.Write([]byte("incorrect input\n"))
 			conn.Write([]byte("[ENTER YOUR NAME]: "))
 		} else if _, exist := s.clients[name]; exist {
@@ -121,24 +138,35 @@ func (s *server) handleConn(conn net.Conn) {
 			break
 		}
 	}
+	s.mutex.Lock()
 	s.clients[name] = conn
+	s.mutex.Unlock()
+	s.mutex.Lock()
 	entering <- message{
 		time: "",
 		name: name,
 		text: name + " has joined our chat...",
 	}
+	s.mutex.Unlock()
 	conn.Write([]byte(fmt.Sprintf("[%s][%s]:", time.Now().Format(timeFormat), name)))
 	// messages <- name + " connected"
 	input := bufio.NewScanner(conn)
 	for input.Scan() {
-		if input.Text() != "" {
-			messages <- message{
-				time: time.Now().Format(timeFormat),
-				name: name,
-				text: input.Text(),
-			}
+		if input.Text() == "" || len(input.Text()) > 300 {
+			conn.Write([]byte("incorrect input\n"))
+			conn.Write([]byte((fmt.Sprintf("[%s][%s]:", time.Now().Format(timeFormat), name))))
+			continue
 		}
+		messages <- message{
+			time: time.Now().Format(timeFormat),
+			name: name,
+			text: input.Text(),
+		}
+		text := fmt.Sprintf("[%s][%s]:%s\n", time.Now().Format(timeFormat), name, input.Text())
 		conn.Write([]byte(fmt.Sprintf("[%s][%s]:", time.Now().Format(timeFormat), name)))
+		s.mutex.Lock()
+		history = append(history, text)
+		s.mutex.Unlock()
 	}
 	leaving <- message{
 		time: "",
@@ -147,9 +175,11 @@ func (s *server) handleConn(conn net.Conn) {
 	}
 	// messages <- name + " disconnected"
 	conn.Close()
+	s.mutex.Lock()
 	s.connections--
 	s.clients[name].Close()
 	delete(s.clients, name)
+	s.mutex.Unlock()
 }
 
 func clientWriter(conn net.Conn, ch <-chan string) {
