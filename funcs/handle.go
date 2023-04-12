@@ -37,7 +37,7 @@ func (s *server) HandleConn(conn net.Conn) {
 			conn.Write([]byte("incorrect input\n"))
 			conn.Write([]byte("\n[ENTER YOUR NAME]: "))
 		} else if _, exist := s.clients[name]; exist {
-			conn.Write([]byte("Username is used\n"))
+			conn.Write([]byte("Username is used"))
 			conn.Write([]byte("\n[ENTER YOUR NAME]: "))
 		} else {
 			break
