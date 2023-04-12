@@ -11,7 +11,7 @@ func main() {
 	args := os.Args[1:]
 	var port string
 	if len(args) != 1 && len(args) != 0 {
-		log.Fatal("fuck you")
+		log.Fatal("try again")
 	} else if len(args) == 1 {
 		port = args[0]
 	} else {
