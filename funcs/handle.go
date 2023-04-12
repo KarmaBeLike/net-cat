@@ -10,18 +10,18 @@ import (
 
 func (s *server) HandleConn(conn net.Conn) {
 	s.mutex.Lock()
-	s.connections++
-
-	if s.connections > s.maxConnections {
+	flag := s.connections == s.maxConnections
+	s.mutex.Unlock()
+	if flag {
 		conn.Write([]byte("Chatroom is full, try again later"))
 		conn.Close()
-		s.connections--
 		return
 	}
+	s.mutex.Lock()
+	s.connections++
 	s.mutex.Unlock()
+
 	Welcome(conn)
-	// ch := make(chan string) // Исходящие сообщения клиентов
-	// go clientWriter(conn, ch)
 	var name string
 	scan := bufio.NewScanner(conn)
 	conn.Write([]byte("\n[ENTER YOUR NAME]: "))
@@ -54,10 +54,9 @@ func (s *server) HandleConn(conn net.Conn) {
 	}
 
 	s.mutex.Unlock()
-	// messages <- name + " connected"
 	input := bufio.NewScanner(conn)
 	for input.Scan() {
-		if input.Text() == "" || len(input.Text()) > 300 {
+		if strings.TrimSpace(input.Text()) == "" || len(input.Text()) > 300 {
 			conn.Write([]byte("incorrect input\n"))
 			conn.Write([]byte((fmt.Sprintf("[%s][%s]:", time.Now().Format(timeFormat), name))))
 			continue
