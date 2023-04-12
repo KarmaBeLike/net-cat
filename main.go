@@ -4,14 +4,24 @@ import (
 	"fmt"
 	"log"
 	"net-cat/funcs"
+	"os"
 )
 
 func main() {
-	s, err := funcs.NewServer("tcp", ":8000", 10)
+	args := os.Args[1:]
+	var port string
+	if len(args) != 1 && len(args) != 0 {
+		log.Fatal("fuck you")
+	} else if len(args) == 1 {
+		port = args[0]
+	} else {
+		port = "8989"
+	}
+	s, err := funcs.NewServer("tcp", ":"+port, 10)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Listening on the port: " + "localhost:8000")
+	fmt.Printf("Listening on the port: " + "localhost:" + port + "\n")
 
 	go s.Broadcaster()
 	for {
